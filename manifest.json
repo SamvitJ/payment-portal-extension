@@ -1,13 +1,13 @@
 {
-  "name": "Requestly",
+  "name": "Portal",
 
   "version": "4.1.4",
   "manifest_version": 2,
-  "description": "Chrome Extension to modify HTTP requests (Redirect | Cancel | Replace | Modify Headers)",
+  "description": "Portal allows you to pay to read individual articles on your favorite news sites",
 
   "content_scripts": [
     {
-      "matches": [ "*://web.requestly.in/*" ],
+      "matches": [ "*://payment-portal.herokuapp.com/*" ],
       "css": [ "src/pages/main.css" ],
       "js": [ "src/pages/libs.js", "src/pages/main.js" ]
     }
@@ -18,6 +18,7 @@
       "src/background/storageService.js",
       "src/Shared/shared.js",
       "src/Shared/utils.js",
+      "src/libs/jquery-1.9.1.js",
       "src/background/background.js"
     ]
   },
@@ -25,13 +26,13 @@
   "content_security_policy": "script-src 'self' 'unsafe-eval' https://cdn.firebase.com https://*.firebaseio.com; object-src 'self'",
 
   "browser_action": {
-    "default_icon": "resources/images/128x128.png",
-    "default_title": "Modify HTTP/HTTPS requests"
+    "default_icon": "resources/images/icon.png",
+    "default_title": "Buy long-form news content"
   },
 
   "icons": {
-    "16": "resources/images/19x19.png",
-    "128": "resources/images/128x128.png"
+    "16": "resources/images/icon.png",
+    "128": "resources/images/icon.png"
   },
   
   "permissions": [
@@ -41,6 +42,7 @@
     "webRequestBlocking",
     "tabs",
     "http://*/*",
-    "https://*/*"
+    "https://*/*",
+    "cookies"
   ]
 }

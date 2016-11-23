@@ -1,3 +1,15 @@
+var articleId;
+var purchasePrice;
+
+var clientId, clientIdExpiration;
+var transactionId = 0;
+var counter = 0;
+
+var PayableHeaderNames = [
+  "X-Article-Id",
+  "X-Purchase-Price",
+];
+
 var BG = {
   Methods: {},
   statusSettings: {
@@ -77,6 +89,15 @@ BG.Methods.modifyHeaderIfExists = function(headers, newHeader) {
   }
 };
 
+BG.Methods.getHeaderIfExists = function(headers, targetHeaderName) {
+  for (var i = headers.length - 1; i >= 0; i--) {
+    if (headers[i].name.toLowerCase() === targetHeaderName.toLowerCase()) {
+      return headers[i];
+    }
+  }
+  return null;
+};
+
 /**
  *
  * @param originalHeaders Original Headers present in the HTTP(s) request
@@ -134,7 +155,38 @@ BG.Methods.modifyHeaders = function(originalHeaders, headersTarget, details) {
     }
   }
 
+  // add proof-of-payment header fields
+  if (transactionId.toString()) {
+    console.log("Now adding payment header fields");
+    isRuleApplied = true;
+    originalHeaders.push({ name: 'Transaction-Id', value: transactionId.toString()});
+    originalHeaders.push({ name: 'Client-Id', value: clientId});
+  }
+
   return isRuleApplied ? originalHeaders : null;
+};
+
+/**
+ *
+ * @param originalHeaders Original Headers present in the HTTP(s) request
+ * @param headersTarget Request/Response (Where Modification is to be done)
+ * @param details (Actual details object)
+ * @returns originalHeaders with modifications if modified else returns {code}null{/code}
+ */
+BG.Methods.getPayableHeaders = function(originalHeaders, headersTarget, details) {
+
+  var payableHeaders = {};
+
+  for (var i = 0; i < PayableHeaderNames.length; i++) {
+    var header = BG.Methods.getHeaderIfExists(originalHeaders, PayableHeaderNames[i]);
+    if (header === null)
+      return null;
+
+    payableHeaders[PayableHeaderNames[i].toLowerCase()] = header.value;
+  }
+
+  console.log("Payable headers: ", payableHeaders);
+  return payableHeaders;
 };
 
 /**
@@ -279,6 +331,31 @@ BG.Methods.modifyResponseHeadersListener = function(details) {
   }
 };
 
+BG.Methods.payableResponseHeadersListener = function(details) {
+  var payableHeaders = BG.Methods.getPayableHeaders(details.responseHeaders, RQ.HEADERS_TARGET.RESPONSE, details);
+
+  if (payableHeaders !== null) {
+    console.log("On a payable webpage");
+    var price = "$" + payableHeaders['x-purchase-price'];
+    chrome.browserAction.setBadgeText({ text: price});
+  } else {
+    // console.log("Not on a payable webpage");
+  }
+};
+
+BG.Methods.onCompletedListener = function(details) {
+  chrome.tabs.query({currentWindow: true, active: true}, function(tabs) {
+    chrome.cookies.get({"url": tabs[0].url, "name": "client-id"}, function (cookie) {
+      if (cookie) {
+        console.log("Client id cookie: ", JSON.stringify(cookie));
+        clientId = cookie.value;
+        transactionId = counter;
+        clientIdExpiration = cookie.expirationDate;
+      }
+    });
+  });
+}
+
 BG.Methods.registerListeners = function() {
   if (!chrome.webRequest.onBeforeRequest.hasListener(BG.Methods.modifyUrl)) {
     chrome.webRequest.onBeforeRequest.addListener(
@@ -297,6 +374,18 @@ BG.Methods.registerListeners = function() {
       BG.Methods.modifyResponseHeadersListener, { urls: ['<all_urls>'] }, ['blocking', 'responseHeaders']
     );
   }
+
+  if (!chrome.webRequest.onHeadersReceived.hasListener(BG.Methods.payableResponseHeadersListener)) {
+    chrome.webRequest.onHeadersReceived.addListener(
+        BG.Methods.payableResponseHeadersListener, { urls: ['<all_urls>'] }, ['blocking', 'responseHeaders']
+    );
+  }
+
+  if (!chrome.webRequest.onCompleted.hasListener(BG.Methods.onCompletedListener)) {
+    chrome.webRequest.onCompleted.addListener(
+      BG.Methods.onCompletedListener, {urls: ['<all_urls>'] }
+    );
+  }
 };
 
 // http://stackoverflow.com/questions/23001428/chrome-webrequest-onbeforerequest-removelistener-how-to-stop-a-chrome-web
@@ -305,6 +394,14 @@ BG.Methods.unregisterListeners = function() {
   chrome.webRequest.onBeforeRequest.removeListener(BG.Methods.modifyUrl);
   chrome.webRequest.onBeforeSendHeaders.removeListener(BG.Methods.modifyRequestHeadersListener);
   chrome.webRequest.onHeadersReceived.removeListener(BG.Methods.modifyResponseHeadersListener);
+  chrome.webRequest.onHeadersReceived.removeListener(BG.Methods.payableResponseHeadersListener);
+  chrome.webRequest.onCompleted.removeListener(BG.Methods.onCompletedListener);
+};
+
+BG.Methods.openAccount = function() {
+  chrome.tabs.create({'url': RQ.WEB_URL }, function(tab) {
+    // Tab opened.
+  });
 };
 
 BG.Methods.disableExtension = function() {
@@ -320,23 +417,27 @@ BG.Methods.enableExtension = function() {
 BG.Methods.handleExtensionDisabled = function() {
   BG.Methods.unregisterListeners();
   chrome.contextMenus.update(BG.extensionStatusContextMenuId, {
-    title: 'Activate Requestly',
+    title: 'Activate Portal',
     onclick: BG.Methods.enableExtension
   });
   chrome.browserAction.setIcon({ path: RQ.RESOURCES.EXTENSION_ICON_GREYSCALE });
   BG.Methods.sendMessage({ isExtensionEnabled: false });
-  console.log('Requestly disabled');
+  console.log('Portal disabled');
 };
 
 BG.Methods.handleExtensionEnabled = function() {
   BG.Methods.registerListeners();
-  chrome.contextMenus.update(BG.extensionStatusContextMenuId, {
-    title: 'Deactivate Requestly',
+  /* chrome.contextMenus.update(BG.extensionStatusContextMenuId, {
+    title: 'Deactivate Portal',
     onclick: BG.Methods.disableExtension
+  }); */
+  chrome.contextMenus.update(BG.extensionStatusContextMenuId, {
+    title: 'View account',
+    onclick: BG.Methods.openAccount
   });
   chrome.browserAction.setIcon({ path: RQ.RESOURCES.EXTENSION_ICON });
   BG.Methods.sendMessage({ isExtensionEnabled: true });
-  console.log('Requestly enabled');
+  console.log('Portal enabled');
 };
 
 BG.Methods.readExtensionStatus = function() {
@@ -349,8 +450,42 @@ BG.Methods.readExtensionStatus = function() {
 };
 
 chrome.browserAction.onClicked.addListener(function () {
-  chrome.tabs.create({'url': RQ.WEB_URL }, function(tab) {
+  counter += 1;
+  /* chrome.tabs.create({'url': RQ.WEB_URL }, function(tab) {
     // Tab opened.
+  }); */
+
+  $.ajax({
+    type: "POST",
+    url: "https://svcs.sandbox.paypal.com/AdaptivePayments/Pay",
+    beforeSend: function(xhr) {
+      xhr.setRequestHeader("X-PAYPAL-SECURITY-USERID", "samvit.jain_api1.gmail.com");
+      xhr.setRequestHeader("X-PAYPAL-SECURITY-PASSWORD", "VJL2NXNEZXFQY3CB");
+      xhr.setRequestHeader("X-PAYPAL-SECURITY-SIGNATURE", "An5ns1Kso7MWUdW4ErQKJJJ4qi4-AVGcZQd33mPK.B0RMlCTgGYW-gOk");
+      xhr.setRequestHeader("X-PAYPAL-REQUEST-DATA-FORMAT", "NV");
+      xhr.setRequestHeader("X-PAYPAL-RESPONSE-DATA-FORMAT", "JSON");
+      xhr.setRequestHeader("X-PAYPAL-APPLICATION-ID", "APP-80W284485P519543T");
+    },
+    data: {
+      "actionType": "PAY",
+      "currencyCode": "USD",
+      "feesPayer": "EACHRECEIVER",
+      "memo": "Example",
+      "preapprovalKey": "PA-1XJ14539UT4824122",
+      "receiverList.receiver(0).amount": "0.20",
+      "receiverList.receiver(0).email": "samvitj@princeton.edu",
+      "senderEmail": "samvit.jain@gmail.com",
+      "returnUrl": "https://payment-portal.herokuapp.com/home",
+      "cancelUrl": "https://payment-portal.herokuapp.com/home",
+      "requestEnvelope.errorLanguage": "en_US"
+    },
+    dataType: "json",
+    success: function(resp) {
+      console.log("Response: " + JSON.stringify(resp));
+    },
+    failure: function(err) {
+      alert(err)
+    }
   });
 });
 

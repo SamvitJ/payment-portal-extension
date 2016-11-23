@@ -7,9 +7,9 @@ RQ.VERSIONS = {
 };
 
 // Url which gets opened when User clicks on browserAction (requestly icon) in toolbar
-RQ.WEB_URL = 'http://web.requestly.in';
+RQ.WEB_URL = 'https://payment-portal.herokuapp.com';
 
-RQ.WEB_URL_PATTERN = '*://web.requestly.in/*';
+RQ.WEB_URL_PATTERN = '*://payment-portal.herokuapp.com/*';
 
 RQ.BLACK_LIST_DOMAINS = [
   'requestly.in'
@@ -75,8 +75,8 @@ RQ.MESSAGES = {
 };
 
 RQ.RESOURCES = {
-  EXTENSION_ICON: '/resources/images/38x38.png',
-  EXTENSION_ICON_GREYSCALE: '/resources/images/38x38_greyscale.png'
+  EXTENSION_ICON: '/resources/images/icon.png',
+  EXTENSION_ICON_GREYSCALE: '/resources/images/icon_grayscale.png'
 };
 
 RQ.GA_EVENTS = {
